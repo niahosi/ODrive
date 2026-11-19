@@ -1,0 +1,56 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "32 一拍控制的完整时间轴",
+  "description": "目标：追踪 ADC、零偏、外环和 PWM，区分采样时刻、执行时刻和输出目标时刻。",
+  "steps": [
+    {
+      "title": "先算出三个频率",
+      "file": "MotorControl/main.cpp",
+      "line": 558,
+      "description": "### 物理模型与推导\n中心对齐载波 fPWM=168MHz/(2×3500)=24kHz；更新事件间隔 H=3500×(2+1)/168MHz=62.5μs；同类控制采样每 2H 一次，即 Ts=125μs、fs=8kHz。\n\n### 对照源码\nstart_adc_pwm 启动定时器；频率常量来自 Board/v3/Inc/main.h 与 board.h。第 33 章细读重复计数器。\n\n### 容易忽略的工程考虑\nPWM、ADC 两类触发和控制更新频率不等同。这里控制更新恰为载波的 1/3，不能照搬常见“每个 PWM 算一次”的说法。\n\n### 自测与参考答案\n1ms 内约 24 个载波周期、16 次更新事件、8 次控制迭代。\n\n---\n### 保留的个人笔记\n- 疑问：控制频率是多少？\n- 验证：从定时器配置计算周期。\n- 关联代码："
+    },
+    {
+      "title": "硬件采样先发生，回调后处理",
+      "file": "MotorControl/motor.cpp",
+      "line": 593,
+      "description": "### 物理模型与推导\nADC 的采样保持时刻决定物理样本，CPU 回调何时读寄存器只决定处理延迟。\n\n### 对照源码\nTIM TRGO 触发 ADC；ControlLoop_IRQHandler 取结果，再调用 current_meas_cb。采样高优先级回调还负责编码器采样任务。\n\n### 容易忽略的工程考虑\n“由定时器驱动回调”不等于“在回调里软件启动电流 ADC”。混淆两者会误判抖动来源。\n\n### 自测与参考答案\nADC 已采到 i(t0)，CPU 晚 5μs 读取，它是否变成 i(t0+5μs)？不是。\n\n---\n### 保留的个人笔记\n- 疑问：直接调用者位于哪个中断？\n- 验证：\n- 关联代码："
+    },
+    {
+      "title": "7.5 个时间常数到底有多充分",
+      "file": "MotorControl/motor.cpp",
+      "line": 600,
+      "description": "### 物理模型与推导\n一阶滤波的初值残差约 exp(−t/τ)。7.5τ 后 exp(−7.5)≈0.000553，即 0.0553%。离散实现精确残差为 (1−k)^N。\n\n### 对照源码\n有效性要求累计时间超过 7.5τ，三相 DC_calib 都小于 max_dc_calib_，并考虑 armed_state 的启动状态。\n\n### 容易忽略的工程考虑\n时间充分只消除了初值影响，不能证明采样窗正确或模拟偏置没有异常。阈值和时间条件缺一不可。\n\n### 自测与参考答案\n若 τ=0.2s，需约 1.5s 才满足时间门槛；τ 是示例，应读取实际配置。\n\n---\n### 保留的个人笔记\n- 疑问：7.5 个时间常数对应多小的残差？\n- 验证：计算 exp(-7.5)。\n- 关联代码："
+    },
+    {
+      "title": "缺失测量不能伪装成零误差",
+      "file": "MotorControl/motor.cpp",
+      "line": 611,
+      "description": "### 物理模型与推导\n零电流是一个物理数值；不知道电流是信息缺失。用同一个 0 表示两者会让闭环错误地继续施压。\n\n### 对照源码\n有效时扣三相 DC_calib；无效时 current_meas_ 置空。armed 后遇到未知测量可导致关断。\n\n### 容易忽略的工程考虑\n板级在 MOE 关闭时有显式零电流猜测以支持启动，源码也承认刚关断或高速 Idle 时未必正确。它是边界处理，不能泛化为定律。\n\n### 自测与参考答案\nstd::nullopt 和 {0,0,0} 分别代表什么？未知与已赋予零值，后者可能来自测量也可能来自该启动假设。\n\n---\n### 保留的个人笔记\n- 疑问：\n- 验证：\n- 关联代码："
+    },
+    {
+      "title": "先检查母线，再继续控制",
+      "file": "MotorControl/motor.cpp",
+      "line": 618,
+      "description": "### 物理模型与推导\n电流控制依赖母线供能，过压、欠压会破坏调制与功率级工作条件。\n\n### 对照源码\ncurrent_meas_cb 在运行控制律前调用 do_fast_checks，保护可能立即使电机 disarm。\n\n### 容易忽略的工程考虑\n错误发生后，同一函数的后续条件会看到新 armed 状态；不能假设进入回调时的状态贯穿整拍。\n\n### 自测与参考答案\n负载减速时母线突然升高，应只检查电流 PI 吗？还要检查回生能量与制动路径，见 52 章。\n\n---\n### 保留的个人笔记\n- 疑问：do_fast_checks 具体检查哪些量？\n- 验证：\n- 关联代码："
+    },
+    {
+      "title": "保护比较的是电流矢量幅值",
+      "file": "MotorControl/motor.cpp",
+      "line": 625,
+      "description": "### 物理模型与推导\n幅值不变 Clarke 下，三相和为零时 Id²+Iq²=2/3·(Ia²+Ib²+Ic²)。比较平方可避免实时开平方。\n\n### 对照源码\n源码用有效限流加 current_lim_margin 得 Itrip，再比较 Inorm_sq 与 Itrip²。\n\n### 容易忽略的工程考虑\ndq 幅值、相电流 RMS 和单次 ADC 值不是同一量。该保护按采样触发，不等同于模拟比较器的连续峰值保护。\n\n### 自测与参考答案\nIa=4A、Ib=Ic=−2A，Inorm²=16A²，矢量幅值 4A；相 RMS 需结合波形另算。\n\n---\n### 保留的个人笔记\n- 疑问：\n- 验证：推导 Clarke 变换前后的模长关系。\n- 关联代码："
+    },
+    {
+      "title": "测量接口与输出接口分成两阶段",
+      "file": "MotorControl/motor.cpp",
+      "line": 640,
+      "description": "### 物理模型与推导\n测量到来时缓存 i 和时间戳；参考更新后再算输出，使算法能同时取得本拍测量与新参考。\n\n### 对照源码\ncurrent_meas_cb 调 on_measurement；board 随后调用 control_loop_cb；最后 pwm_update_cb 调 get_output。FOC::update 只锁存参考。\n\n### 容易忽略的工程考虑\n看到 on_measurement 返回成功，不能就断言 PWM 已经算好。R/L 控制律与正常 FOC 的计算分布也不同。\n\n### 自测与参考答案\nFOC 电流误差和 PI 电压主要在哪里计算？get_alpha_beta_output，而非其 on_measurement。\n\n---\n### 保留的个人笔记\n- 疑问：控制律输出最终如何变成 PWM？\n- 验证：\n- 关联代码："
+    },
+    {
+      "title": "零偏用另一种开关状态测量",
+      "file": "MotorControl/motor.cpp",
+      "line": 653,
+      "description": "### 物理模型与推导\n三相桥全高侧零矢量时，绕组电流可以续流，但低侧分流支路理想上没有相电流，从而观察测量链偏置。\n\n### 对照源码\nControlLoop 取第二批 ADC 调 dc_calib_cb；offset+=k(sample−offset)，k=min(Ts/τ,1)。该滤波不是对运行相电流取长期平均。\n\n### 容易忽略的工程考虑\n若在承载真实电流的低侧导通窗更新偏置，会把电流逐渐“学成零偏”。滤波再慢也无法纠正窗口选错。\n\n### 自测与参考答案\n全高侧零矢量时测得零，能否推断电机三相电流为零？不能，只能讨论此分流支路。\n\n---\n### 保留的个人笔记\n- 疑问：\n- 验证：计算当前 dt、tau 和 k。\n- 关联代码："
+    }
+  ],
+  "nextTour": "33 采样窗口谐波混叠与数字延迟"
+}

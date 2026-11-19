@@ -1,0 +1,38 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "43 输入整形轨迹与前馈",
+  "description": "目标：区分命令、参考和反馈，推导斜坡、二阶滤波和梯形轨迹。",
+  "steps": [
+    {
+      "title": "阶跃目标为什么需要参考发生器",
+      "file": "MotorControl/controller.cpp",
+      "line": 187,
+      "description": "### 物理模型与推导\n外部 input_pos 是命令，pos_setpoint 是本拍参考，pos_estimate 是反馈。直接给位置阶跃 Δx 会产生 KxΔx 的速度需求，再可能触发转矩限幅。\n\n### 对照源码\nPASSTHROUGH 直接拷贝；VEL_RAMP 每拍把速度增量限制到 amax·Ts；TORQUE_RAMP 同理限制转矩变化。\n\n### 容易忽略的工程考虑\n斜坡限制的是参考变化，不保证实际机械加速度一定满足相同数值，实际还取决于转矩、负载和跟踪误差。\n\n### 自测与参考答案\namax=10turn/s²、Ts=125μs，每拍最大 Δv=0.00125turn/s；升至 2turn/s 理想需 0.2s。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    },
+    {
+      "title": "重规划保持参考连续",
+      "file": "MotorControl/controller.cpp",
+      "line": 31,
+      "description": "### 物理模型与推导\n运动中更改终点时，使用当前规划参考 x、v 作为起点，可以保持参考位置与速度连续。若改用滞后的反馈，参考可能突然跳回。\n\n### 对照源码\nmove_to_pos 将 pos_setpoint_、vel_setpoint_ 传给 planTrapezoidal，再从 t=0 重新评估。反馈误差仍由控制环纠正。\n\n### 容易忽略的工程考虑\n连续位置和速度不表示加速度连续。梯形速度轨迹存在加速度阶跃，柔性系统可能被激发；本实现不是限制 jerk 的 S 曲线。\n\n### 自测与参考答案\n从加速段直接重规划到减速，哪些量可能跳变？加速度可能跳，位置和速度由当前参考衔接。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    },
+    {
+      "title": "短行程为什么只有三角形速度",
+      "file": "MotorControl/trapTraj.cpp",
+      "line": 21,
+      "description": "### 物理模型与推导\n制动距离 dstop=v0²/(2D)。从零速出发，若 A=D=a，达到 vmax 再停下需 dmin=vmax²/a；小于此距离时峰值速度 vp=sqrt(a·d)，没有匀速段。\n\n### 对照源码\nplanTrapezoidal 根据带符号制动位移选择方向，计算 Ta/Td，再区分长行程和短行程；还处理初速高于巡航速度的情形。\n\n### 容易忽略的工程考虑\n不能简单用目标位置在左还是右决定先加速方向：当前动量可能要求先制动、越过目标或反向。\n\n### 自测与参考答案\na=10turn/s²、vmax=2turn/s，dmin=0.4turn；移动 0.1turn 时 vp=1turn/s，Ta=Td=0.1s，总时长 0.2s。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    },
+    {
+      "title": "加速度前馈为何需要惯量",
+      "file": "MotorControl/controller.cpp",
+      "line": 265,
+      "description": "### 物理模型与推导\n机械方程 T≈J·dω/dt=2πJ·a，因 a 单位 turn/s²，config.inertia 应按 2πJ 理解。前馈预先给加速所需转矩，反馈再修正负载和模型误差。\n\n### 对照源码\n轨迹返回 Y/Yd/Ydd，分别成为位置、速度与转矩前馈；VEL_RAMP 和 POS_FILTER 也使用惯量参数。\n\n### 容易忽略的工程考虑\n前馈不观察实际误差，不会自动补上未知摩擦或错误惯量。负载变化后可能出现加速段跟踪误差。\n\n### 自测与参考答案\nJ=10⁻⁴kg·m²、a=100turn/s²，所需约 0.0628Nm；若直接把 J 填进 inertia，会少约 2π 倍。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    },
+    {
+      "title": "二阶输入滤波与伺服反馈是两个系统",
+      "file": "MotorControl/controller.cpp",
+      "line": 207,
+      "description": "### 物理模型与推导\n滤波器令 a=b²(x命令−x参考)+2b(v命令−v参考)，理想连续特征式 s²+2bs+b²=(s+b)²，为临界阻尼。源码把 input_filter_kp 设 b²、ki 设 2b。\n\n### 对照源码\nPOS_FILTER 先算参考加速度，再积分速度和位置；update_filter_gains 将 b 限到 0.25×current_meas_hz，之后实际还要乘 Ts。\n\n### 容易忽略的工程考虑\n名字 kp/ki 容易误导：这里不是电流 PI 的比例/积分。连续临界阻尼也不能直接证明任意离散参数下轨迹都严格无超调。\n\n### 自测与参考答案\nb=10s⁻¹ 时两系数为 100s⁻² 和 20s⁻¹；减小 b 会更平滑，也让参考更滞后。\n\n---\n### 我的笔记\n- 推导与观察：\n- 尚待验证："
+    }
+  ],
+  "nextTour": "44 编码器PLL与电角度标定"
+}

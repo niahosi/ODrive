@@ -1,0 +1,33 @@
+# 使用真实交叉编译命令，并让头文件诊断继承其源文件参数。
+CompileFlags:
+  CompilationDatabase: .
+
+Diagnostics:
+  # GCC 接受旧版 STM32 头文件中的写法，Clang 会将其视为非常量表达式。
+  Suppress:
+    - constexpr_var_requires_const_init
+
+Index:
+  Background: Build
+  StandardLibrary: Yes
+
+---
+# 启动汇编由 GCC 构建，但 clangd 无法为它创建可靠的语法树。
+# 跳过汇编索引不影响 C/C++ 符号跳转，也能避免后台输出无意义的编译错误。
+If:
+  PathMatch: .*\.s
+
+Index:
+  Background: Skip
+
+Diagnostics:
+  Suppress: '*'
+
+---
+# 此头文件依赖 odrive_main.h 的包含顺序，单独打开时补齐解析上下文。
+# 仅影响 clangd，固件仍使用编译数据库中的原始命令构建。
+If:
+  PathMatch: MotorControl/controller\.hpp
+
+CompileFlags:
+  Add: [-include, odrive_main.h]

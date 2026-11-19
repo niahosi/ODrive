@@ -1,0 +1,33 @@
+# 仓库级回退配置：Arduino 等目录复用固件的交叉编译参数。
+# Firmware 目录内还有更精确的局部 .clangd 配置。
+CompileFlags:
+  CompilationDatabase: Firmware
+
+Diagnostics:
+  # GCC 接受旧版 STM32 头文件中的写法，Clang 会将其视为非常量表达式。
+  Suppress:
+    - constexpr_var_requires_const_init
+
+Index:
+  Background: Build
+  StandardLibrary: Yes
+
+---
+# Arduino 库使用系统安装的 AVR Core，避免 Arduino.h 和 Stream 类型无法跳转。
+If:
+  PathMatch: Arduino/.*
+
+CompileFlags:
+  Compiler: /usr/bin/avr-g++
+  Remove:
+    - -mthumb
+    - -mfloat-abi=*
+    - -mcpu=*
+    - -mfpu=*
+  Add:
+    - -std=gnu++11
+    - -mmcu=atmega328p
+    - -DARDUINO=10819
+    - -DARDUINO_ARCH_AVR
+    - -I/usr/share/arduino/hardware/arduino/avr/cores/arduino
+    - -I/usr/share/arduino/hardware/arduino/avr/variants/standard

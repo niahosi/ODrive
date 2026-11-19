@@ -1,0 +1,38 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "41 控制结构与信号的新鲜度",
+  "description": "目标：理解 Axis、输入整形、级联反馈和可替换控制律如何协同。",
+  "steps": [
+    {
+      "title": "四种选择分别回答四个问题",
+      "file": "MotorControl/controller.hpp",
+      "line": 25,
+      "description": "### 物理模型与推导\nAxis 状态决定任务；InputMode 决定如何生成参考；ControlMode 决定从位置、速度还是转矩层进入；control_law_ 决定如何由测量计算 PWM。\n\n### 对照源码\ncontrol_mode 和 input_mode 相邻，但它们不表示同一维度。速度控制通常仍需要电流闭环。\n\n### 容易忽略的工程考虑\n“开环”必须说明断开的是哪一环。开环扫电角度、转矩模式、GIMBAL 电压模式不能混称一种状态。\n\n### 自测与参考答案\n速度斜坡+速度控制分别设置什么？InputMode=VEL_RAMP，ControlMode=VELOCITY_CONTROL；位置反馈被跳过，电流反馈可仍闭合。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    },
+    {
+      "title": "同一拍按依赖顺序更新",
+      "file": "MotorControl/main.cpp",
+      "line": 435,
+      "description": "### 物理模型与推导\n生产者必须先给出本拍有效量，消费者才能形成同一拍输出；顺序也隐含离散延迟。\n\n### 对照源码\n先更新两个 Encoder，再逐轴更新估算器、Controller、OpenLoop、Motor、FOC 参考。最后 PWM 回调真正求调制量。\n\n### 容易忽略的工程考虑\n两个编码器先更新支持跨轴读取；但不能据此推断所有跨轴 Controller 输出都同时可用。例如相互 MIRROR 还要看 torque_output 的更新先后。\n\n### 自测与参考答案\n把 Motor 更新放到 Controller 之前会怎样？本拍 torque_output 可能尚未就绪，端口返回空值。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    },
+    {
+      "title": "连接的是物理信号来源",
+      "file": "MotorControl/axis.cpp",
+      "line": 267,
+      "description": "### 物理模型与推导\n有感 PMSM 通过编码器给电角度；无感路径通过观测器；校准时用预设相位激励。不同来源代表不同观测假设。\n\n### 对照源码\nconnect_to 在临界区设置外环反馈、转矩输入、Idq/Vdq 与相位端口。ACIM 还经定子相位估算。\n\n### 容易忽略的工程考虑\n外环负载编码器与电机换相编码器可能不同，不能把 load_encoder_axis 当成 FOC 相位源开关。\n\n### 自测与参考答案\n双编码器系统为何可能外环位置正确但换相错误？外环和转子电角度可以来自不同通路。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    },
+    {
+      "title": "端口年龄把陈旧值显式化",
+      "file": "MotorControl/component.hpp",
+      "line": 62,
+      "description": "### 物理模型与推导\n数值本身不含“是否来自这一拍”的信息。过期反馈即使看起来合理，也可能在上游失效后持续驱动下游。\n\n### 对照源码\nOutputPort reset 使 age 加一；赋值使其归零；present 要 age=0，previous 要 age=1，any 不检查年龄。\n\n### 容易忽略的工程考虑\n这不是自动多线程同步机制。InputPort 连常量或普通指针时也不能获得相同的生产者年龄保证；临界区和原子性仍要另看。\n\n### 自测与参考答案\n上拍已写，reset 后 present/previous 各是什么？空/上拍值；本拍写后则为本拍值/空。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    },
+    {
+      "title": "控制律替换同时包含生命周期约束",
+      "file": "MotorControl/motor.cpp",
+      "line": 191,
+      "description": "### 物理模型与推导\n参数辨识与闭环驱动共用功率级，但从测量到电压的算法不同；接口抽象让时间关键硬件路径复用。\n\n### 对照源码\narm 保存 PhaseControlLaw 指针并 reset；测 R/L 挂临时栈对象，测量函数返回前先 disarm。正常闭环用成员 current_control_。\n\n### 容易忽略的工程考虑\n虚函数解决算法分派，不解决对象存活时间。中断引用已经析构的临时对象，会破坏整个控制路径。\n\n### 自测与参考答案\n裸 C 怎么表达？函数指针表+上下文指针，同时保证上下文存活并在卸载时处理并发访问。\n\n---\n### 保留的个人笔记\n- 推导或观察：\n- 还想验证："
+    }
+  ],
+  "nextTour": "42 位置速度转矩级联控制"
+}

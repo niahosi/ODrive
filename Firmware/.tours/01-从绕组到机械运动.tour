@@ -1,0 +1,32 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "01 从绕组到机械运动",
+  "description": "前置：基础代数和导数。目标：推导电压、电流、磁链、转矩与速度关系，并统一单位。",
+  "steps": [
+    {
+      "title": "电感让电流不能随电压瞬间跳变",
+      "file": "MotorControl/motor.cpp",
+      "line": 293,
+      "description": "### 物理模型与推导\n静止简化绕组满足 v=Ri+L·di/dt。施加恒压时 i(t)=V/R·(1−exp(−tR/L))，时间常数 τe=L/R；电压决定电流变化率，而不是直接决定瞬时转矩。\n\n### 对照源码\n代码用 phase_inductance、phase_resistance 和 current_control_bandwidth 生成 PI 增益。先理解对象，再读 51 章极零相消。\n\n### 容易忽略的工程考虑\n这是线性等效相参数模型。绕组接法、温升、磁饱和、死区和反电动势都会影响实测值；线间电阻不能未经换算直接当成这里的相参数。\n\n### 自测与参考答案\n教学例 R=0.1Ω、L=100μH，τe=1ms。静止加 1V，稳态 10A，1ms 时约 6.32A。\n\n---\n### 我的笔记\n- 推导与观察：\n- 尚待验证："
+    },
+    {
+      "title": "为什么优先控制 Iq",
+      "file": "MotorControl/motor.cpp",
+      "line": 536,
+      "description": "### 物理模型与推导\n在表贴式永磁同步电机、正弦磁链、Id≈0 的近似下，T≈Kt·Iq。机械方程 J·dωm/dt=T−T负载−Bωm。因此控制 Iq 就获得近似线性的转矩执行器。\n\n### 对照源码\n永磁路径直接用 torque/torque_constant 得 Iq；ACIM 分支另含转子磁链，GIMBAL 分支使用电压控制。不能把三种类型套同一公式。\n\n### 容易忽略的工程考虑\nKt 的电流约定必须与代码 dq 幅值约定一致；数据手册的 RMS、峰值、线电流约定可能不同。不要只看“Nm/A”四个字符。\n\n### 自测与参考答案\nKt=0.05Nm/A、T*=0.2Nm，Iq*=4A。若测量角错位 30°，真实有效 q 分量可降为约 3.46A，并引入约 2A 的 d 分量（符号依误差定义）。\n\n---\n### 我的笔记\n- 推导与观察：\n- 尚待验证："
+    },
+    {
+      "title": "反电动势为什么限制高速",
+      "file": "MotorControl/motor.cpp",
+      "line": 573,
+      "description": "### 物理模型与推导\n非凸极 PMSM 近似 vd=RId+L·dId/dt−ωeLIq；vq=RIq+L·dIq/dt+ωeLId+ωeψf。ωe=pωm。转速越高，反电动势 ωeψf 占用越多电压余量。\n\n### 对照源码\nMotor::update 中 R_wL_FF_enable 对应电阻压降和交叉耦合前馈；bEMF_FF_enable 对应 q 轴反电动势前馈。开关需由配置启用。\n\n### 容易忽略的工程考虑\n前馈补偿不能突破母线电压约束。达到电压上限后，增大 PI 只会更快饱和；本段也不能据此认定已有自动弱磁功能。\n\n### 自测与参考答案\n若可用电压 11V，反电动势已占 10V，是否仍能保证大电流阶跃？不能，留给 Ri 和 Ldi/dt 的余量很小。\n\n---\n### 我的笔记\n- 推导与观察：\n- 尚待验证："
+    },
+    {
+      "title": "机械单位差一个 2π 就会调错",
+      "file": "MotorControl/controller.cpp",
+      "line": 431,
+      "description": "### 物理模型与推导\n源码外环位置用 turn、速度用 turn/s；物理角速度 ωm=2πv。功率 P=Tωm=2πTv；惯量前馈 T=J·2πa，所以 config.inertia 对应 2πJ。\n\n### 对照源码\n控制器的机械功率计算显式乘 M_PI*2；轨迹加速度乘 config_.inertia。这两个位置可以互相核对单位。\n\n### 容易忽略的工程考虑\n电角速度还要再乘极对数 p。不要把机械 rpm、电 rad/s 和 turn/s 混用；电角度 wrap 后也不能直接做普通差分。\n\n### 自测与参考答案\nT=0.2Nm、v=10turn/s 时 P≈12.57W；J=10⁻⁴kg·m²、a=100turn/s² 时前馈转矩约 0.0628Nm。\n\n---\n### 我的笔记\n- 推导与观察：\n- 尚待验证："
+    }
+  ],
+  "nextTour": "10 上电顺序与确定性运行"
+}
